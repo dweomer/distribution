@@ -5,31 +5,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/distribution/distribution/v3"
 	"github.com/opencontainers/go-digest"
+	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
-
-type mockBlobService struct {
-	descriptors map[digest.Digest]distribution.Descriptor
-	distribution.BlobService
-}
-
-func (bs *mockBlobService) Stat(ctx context.Context, dgst digest.Digest) (distribution.Descriptor, error) {
-	if descriptor, ok := bs.descriptors[dgst]; ok {
-		return descriptor, nil
-	}
-	return distribution.Descriptor{}, distribution.ErrBlobUnknown
-}
-
-func (bs *mockBlobService) Put(ctx context.Context, mediaType string, p []byte) (distribution.Descriptor, error) {
-	d := distribution.Descriptor{
-		MediaType: "application/octet-stream",
-		Digest:    digest.FromBytes(p),
-		Size:      int64(len(p)),
-	}
-	bs.descriptors[d.Digest] = d
-	return d, nil
-}
 
 func TestBuilder(t *testing.T) {
 	imgJSON := []byte(`{
@@ -132,7 +110,7 @@ func TestBuilder(t *testing.T) {
 }`)
 	configDigest := digest.FromBytes(imgJSON)
 
-	descriptors := []distribution.Descriptor{
+	descriptors := []v1.Descriptor{
 		{
 			MediaType: MediaTypeLayer,
 			Digest:    digest.Digest("sha256:a3ed95caeb02ffe68cdd9fd84406680ae93d633cb16422d00e8a7c22955b46d4"),
@@ -150,8 +128,13 @@ func TestBuilder(t *testing.T) {
 		},
 	}
 
-	bs := &mockBlobService{descriptors: make(map[digest.Digest]distribution.Descriptor)}
-	builder := NewManifestBuilder(bs, MediaTypeImageConfig, imgJSON)
+	d := v1.Descriptor{
+		Digest:    digest.FromBytes(imgJSON),
+		Size:      int64(len(imgJSON)),
+		MediaType: MediaTypeImageConfig,
+	}
+
+	builder := NewManifestBuilder(d, imgJSON)
 
 	for _, d := range descriptors {
 		if err := builder.AppendReference(d); err != nil {
@@ -162,12 +145,6 @@ func TestBuilder(t *testing.T) {
 	built, err := builder.Build(context.Background())
 	if err != nil {
 		t.Fatalf("Build returned error: %v", err)
-	}
-
-	// Check that the config was put in the blob store
-	_, err = bs.Stat(context.Background(), configDigest)
-	if err != nil {
-		t.Fatal("config was not put in the blob store")
 	}
 
 	manifest := built.(*DeserializedManifest).Manifest
@@ -188,7 +165,7 @@ func TestBuilder(t *testing.T) {
 	}
 
 	references := manifest.References()
-	expected := append([]distribution.Descriptor{manifest.Target()}, descriptors...)
+	expected := append([]v1.Descriptor{manifest.Target()}, descriptors...)
 	if !reflect.DeepEqual(references, expected) {
 		t.Fatal("References() does not match the descriptors added")
 	}

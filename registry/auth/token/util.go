@@ -1,35 +1,14 @@
 package token
 
 import (
+	"crypto"
+	"crypto/ecdsa"
+	"crypto/rsa"
+	"crypto/sha256"
 	"encoding/base64"
-	"errors"
-	"strings"
+	"fmt"
+	"math/big"
 )
-
-// joseBase64UrlEncode encodes the given data using the standard base64 url
-// encoding format but with all trailing '=' characters omitted in accordance
-// with the jose specification.
-// http://tools.ietf.org/html/draft-ietf-jose-json-web-signature-31#section-2
-func joseBase64UrlEncode(b []byte) string {
-	return strings.TrimRight(base64.URLEncoding.EncodeToString(b), "=")
-}
-
-// joseBase64UrlDecode decodes the given string using the standard base64 url
-// decoder but first adds the appropriate number of trailing '=' characters in
-// accordance with the jose specification.
-// http://tools.ietf.org/html/draft-ietf-jose-json-web-signature-31#section-2
-func joseBase64UrlDecode(s string) ([]byte, error) {
-	switch len(s) % 4 {
-	case 0:
-	case 2:
-		s += "=="
-	case 3:
-		s += "="
-	default:
-		return nil, errors.New("illegal base64url string")
-	}
-	return base64.URLEncoding.DecodeString(s)
-}
 
 // actionSet is a special type of stringSet.
 type actionSet struct {
@@ -66,4 +45,42 @@ func containsAny(ss []string, q []string) bool {
 	}
 
 	return false
+}
+
+// NOTE: RFC7638 does not prescribe which hashing function to use, but suggests
+// sha256 as a sane default as of time of writing
+func hashAndEncode(payload string) string {
+	shasum := sha256.Sum256([]byte(payload))
+	return base64.RawURLEncoding.EncodeToString(shasum[:])
+}
+
+// RFC7638 states in section 3 sub 1 that the keys in the JSON object payload
+// are required to be ordered lexicographical order. Golang does not guarantee
+// order of keys[0]
+// [0]: https://groups.google.com/g/golang-dev/c/zBQwhm3VfvU
+//
+// The payloads are small enough to create the JSON strings manually
+func GetRFC7638Thumbprint(publickey crypto.PublicKey) string {
+	var payload string
+
+	switch pubkey := publickey.(type) {
+	case *rsa.PublicKey:
+		e_big := big.NewInt(int64(pubkey.E)).Bytes()
+
+		e := base64.RawURLEncoding.EncodeToString(e_big)
+		n := base64.RawURLEncoding.EncodeToString(pubkey.N.Bytes())
+
+		payload = fmt.Sprintf(`{"e":"%s","kty":"RSA","n":"%s"}`, e, n)
+	case *ecdsa.PublicKey:
+		params := pubkey.Params()
+		crv := params.Name
+		x := base64.RawURLEncoding.EncodeToString(params.Gx.Bytes())
+		y := base64.RawURLEncoding.EncodeToString(params.Gy.Bytes())
+
+		payload = fmt.Sprintf(`{"crv":"%s","kty":"EC","x":"%s","y":"%s"}`, crv, x, y)
+	default:
+		return ""
+	}
+
+	return hashAndEncode(payload)
 }

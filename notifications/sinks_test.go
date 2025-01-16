@@ -51,7 +51,7 @@ func TestEventQueue(t *testing.T) {
 	}
 
 	if !ts.closed {
-		t.Fatalf("sink should have been closed")
+		t.Fatal("sink should have been closed")
 	}
 
 	if metrics.Events != nevents {
@@ -73,49 +73,49 @@ func TestIgnoredSink(t *testing.T) {
 		expected         events.Event
 	}
 
-	cases := []testcase{
-		{nil, nil, blob},
-		{[]string{"other"}, []string{"other"}, blob},
-		{[]string{"blob", "manifest"}, []string{"other"}, nil},
-		{[]string{"other"}, []string{"pull"}, blob},
-		{[]string{"other"}, []string{"pull", "push"}, nil},
+	tests := []testcase{
+		{expected: blob},
+		{ignoreMediaTypes: []string{"other"}, ignoreActions: []string{"other"}, expected: blob},
+		{ignoreMediaTypes: []string{"blob", "manifest"}, ignoreActions: []string{"other"}},
+		{ignoreMediaTypes: []string{"other"}, ignoreActions: []string{"pull"}, expected: blob},
+		{ignoreMediaTypes: []string{"other"}, ignoreActions: []string{"pull", "push"}},
 	}
 
-	for _, c := range cases {
+	for _, tc := range tests {
 		ts := &testSink{}
-		s := newIgnoredSink(ts, c.ignoreMediaTypes, c.ignoreActions)
+		s := newIgnoredSink(ts, tc.ignoreMediaTypes, tc.ignoreActions)
 
 		if err := s.Write(blob); err != nil {
 			t.Fatalf("error writing event: %v", err)
 		}
 
 		ts.mu.Lock()
-		if !reflect.DeepEqual(ts.event, c.expected) {
-			t.Fatalf("unexpected event: %#v != %#v", ts.event, c.expected)
+		if !reflect.DeepEqual(ts.event, tc.expected) {
+			t.Fatalf("unexpected event: %#v != %#v", ts.event, tc.expected)
 		}
 		ts.mu.Unlock()
 	}
 
-	cases = []testcase{
-		{nil, nil, manifest},
-		{[]string{"other"}, []string{"other"}, manifest},
-		{[]string{"blob"}, []string{"other"}, manifest},
-		{[]string{"blob", "manifest"}, []string{"other"}, nil},
-		{[]string{"other"}, []string{"push"}, manifest},
-		{[]string{"other"}, []string{"pull", "push"}, nil},
+	tests = []testcase{
+		{expected: manifest},
+		{ignoreMediaTypes: []string{"other"}, ignoreActions: []string{"other"}, expected: manifest},
+		{ignoreMediaTypes: []string{"blob"}, ignoreActions: []string{"other"}, expected: manifest},
+		{ignoreMediaTypes: []string{"blob", "manifest"}, ignoreActions: []string{"other"}},
+		{ignoreMediaTypes: []string{"other"}, ignoreActions: []string{"push"}, expected: manifest},
+		{ignoreMediaTypes: []string{"other"}, ignoreActions: []string{"pull", "push"}},
 	}
 
-	for _, c := range cases {
+	for _, tc := range tests {
 		ts := &testSink{}
-		s := newIgnoredSink(ts, c.ignoreMediaTypes, c.ignoreActions)
+		s := newIgnoredSink(ts, tc.ignoreMediaTypes, tc.ignoreActions)
 
 		if err := s.Write(manifest); err != nil {
 			t.Fatalf("error writing event: %v", err)
 		}
 
 		ts.mu.Lock()
-		if !reflect.DeepEqual(ts.event, c.expected) {
-			t.Fatalf("unexpected event: %#v != %#v", ts.event, c.expected)
+		if !reflect.DeepEqual(ts.event, tc.expected) {
+			t.Fatalf("unexpected event: %#v != %#v", ts.event, tc.expected)
 		}
 		ts.mu.Unlock()
 	}
@@ -162,13 +162,13 @@ func checkClose(t *testing.T, sink events.Sink) {
 
 	// second close should not crash but should return an error.
 	if err := sink.Close(); err == nil {
-		t.Fatalf("no error on double close")
+		t.Fatal("no error on double close")
 	}
 
 	// Write after closed should be an error
 	if err := sink.Write(Event{}); err == nil {
-		t.Fatalf("write after closed did not have an error")
+		t.Fatal("write after closed did not have an error")
 	} else if err != ErrSinkClosed {
-		t.Fatalf("error should be ErrSinkClosed")
+		t.Fatal("error should be ErrSinkClosed")
 	}
 }

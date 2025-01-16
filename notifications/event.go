@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/distribution/distribution/v3"
 	events "github.com/docker/go-events"
+	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 // EventAction constants used in action field of Event.
@@ -20,7 +20,7 @@ const (
 	// EventsMediaType is the mediatype for the json event envelope. If the
 	// Event, ActorRecord, SourceRecord or Envelope structs change, the version
 	// number should be incremented.
-	EventsMediaType = "application/vnd.docker.distribution.events.v1+json"
+	EventsMediaType = "application/vnd.docker.distribution.events.v2+json"
 	// LayerMediaType is the media type for image rootfs diffs (aka "layers")
 	// used by Docker. We don't expect this to change for quite a while.
 	layerMediaType = "application/vnd.docker.container.image.rootfs.diff+x-gtar"
@@ -54,7 +54,7 @@ type Event struct {
 	Target struct {
 		// TODO(stevvooe): Use http.DetectContentType for layers, maybe.
 
-		distribution.Descriptor
+		v1.Descriptor
 
 		// Length in bytes of content. Same as Size field in Descriptor.
 		// Provided for backwards compatibility.
@@ -74,7 +74,7 @@ type Event struct {
 		Tag string `json:"tag,omitempty"`
 
 		// References provides the references descriptors.
-		References []distribution.Descriptor `json:"references,omitempty"`
+		References []v1.Descriptor `json:"references,omitempty"`
 	} `json:"target,omitempty"`
 
 	// Request covers the request that generated the event.
